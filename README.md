@@ -1,7 +1,8 @@
-# GroupAlarm für Home Assistant
+# HomeAssistantAlarm
 
-Eine [HACS](https://hacs.xyz/)-Custom-Integration, die Alarme von einem
-GroupAlarm-Server (siehe [`docs/homeassistant-integration-api.md`](docs/homeassistant-integration-api.md))
+**HomeAssistantAlarm** ist eine [HACS](https://hacs.xyz/)-Custom-Integration,
+die Alarme von einem GroupAlarm-Server (siehe
+[`docs/homeassistant-integration-api.md`](docs/homeassistant-integration-api.md))
 in Home Assistant empfängt – als Event, mit dem sich beliebige Automationen
 auslösen lassen ("Licht an bei Einsatz", Push-Benachrichtigung, Sirene, ...),
 und als Sensor-Entities fürs Dashboard/History.
