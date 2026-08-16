@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to GroupAlarm",
+        "description": "Find the UUID and API key in your GroupAlarm profile under 'Profile → HomeAssistant'.",
+        "data": {
+          "host": "Server URL",
+          "uuid": "Connection UUID",
+          "api_key": "API key"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate GroupAlarm",
+        "description": "The API key for connection {uuid} was rejected or no longer exists. Please enter a new key.",
+        "data": {
+          "api_key": "API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key.",
+      "not_found": "Unknown connection UUID.",
+      "cannot_connect": "Could not reach the server."
+    },
+    "abort": {
+      "already_configured": "This connection is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  }
+}
