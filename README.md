@@ -27,11 +27,11 @@ und als Sensor-Entities fürs Dashboard/History.
 
 1. HACS → Integrationen → Menü (⋮) → *Benutzerdefinierte Repositories*.
 2. Dieses Repository als Typ *Integration* hinzufügen.
-3. "GroupAlarm" installieren und Home Assistant neu starten.
+3. "HomeAssistantAlarm" installieren und Home Assistant neu starten.
 
 ### Manuell
 
-Den Ordner [`custom_components/groupalarm`](custom_components/groupalarm)
+Den Ordner [`custom_components/homeassistantalarm`](custom_components/homeassistantalarm)
 in das `custom_components`-Verzeichnis deiner Home-Assistant-Installation
 kopieren und Home Assistant neu starten.
 
@@ -41,14 +41,14 @@ kopieren und Home Assistant neu starten.
    Verbindung anlegen. Dabei werden **UUID** und **API-Key** einmalig
    angezeigt – notieren.
 2. In Home Assistant: *Einstellungen → Geräte & Dienste → Integration
-   hinzufügen* → "GroupAlarm" suchen.
+   hinzufügen* → "HomeAssistantAlarm" suchen.
 3. **Server-URL**, **Verbindungs-UUID** und **API-Key** eingeben:
    - Produktiv-Server: `https://api.groupalarm.org`
    - Selbst gehostet: `http://<server>:<port>` (Standardport `7000`)
 4. Die Zuordnung der Verbindung zu GroupAlarm-Organisationen erfolgt
    ausschließlich im GroupAlarm-Webinterface (*Schatten-Organisationen*).
    Wird die Zuordnung nach der Einrichtung geändert, muss die Integration
-   neu geladen werden (*Einstellungen → Geräte & Dienste → GroupAlarm →
+   neu geladen werden (*Einstellungen → Geräte & Dienste → HomeAssistantAlarm →
    Neu laden*), damit neue Organisations-Sensoren angelegt werden.
 
 ## Was die Integration bereitstellt
@@ -132,7 +132,7 @@ Entwicklungsstand, Architekturentscheidungen und offene TODOs stehen in
 ## Entwicklung
 
 ```
-custom_components/groupalarm/
+custom_components/homeassistantalarm/
 ├── __init__.py        # Entry-Setup/-Unload, verbindet Client & Coordinator
 ├── api.py              # HTTP/SSE-Client für /status, /poll, /stream
 ├── config_flow.py       # Einrichtungsdialog + Reauth
@@ -143,7 +143,3 @@ custom_components/groupalarm/
 └── manifest.json
 ```
 
-> **Hinweis:** `codeowners`, `documentation` und `issue_tracker` in
-> [`manifest.json`](custom_components/groupalarm/manifest.json) enthalten
-> noch Platzhalter (`your-github-username`) – bitte nach dem Anlegen des
-> GitHub-Repositories anpassen.

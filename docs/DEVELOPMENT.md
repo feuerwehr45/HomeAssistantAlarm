@@ -39,10 +39,12 @@ Server-Seite abzugleichen).
 - **Dedupe über `id`.** `deque(maxlen=50)` der zuletzt gesehenen IDs in
   `GroupAlarmConnection`, wie in der Server-Doku empfohlen (Alarme können
   durch SSE **und** den nachfolgenden Aufhol-Poll doppelt ankommen).
-- **`latest_id` wird persistiert** (`homeassistant.helpers.storage.Store`,
-  ein Store pro Config-Entry), damit nach einem HA-Neustart nahtlos beim
-  letzten bekannten Alarm weitergemacht wird, statt erneut die letzten 50
-  Alarme zu bekommen.
+- **`latest_id`, `last_alarm` und `last_alarm_by_org` werden persistiert**
+  (`homeassistant.helpers.storage.Store`, ein Store pro Config-Entry), damit
+  nach einem HA-Neustart nahtlos beim letzten bekannten Alarm weitergemacht
+  wird (statt erneut die letzten 50 Alarme zu bekommen) und die Sensoren
+  sofort wieder den letzten Alarmtext zeigen, statt bis zum nächsten neuen
+  Alarm "unknown" anzuzeigen.
 - **Sensoren nur für Organisationen, die beim Setup in
   `subscribedOrganizations` standen** (`sensor.py` liest das aus der
   `/status`-Antwort, die beim Config-Entry-Setup einmal geholt wird).
@@ -60,7 +62,7 @@ Server-Seite abzugleichen).
 ## Dateiübersicht
 
 ```
-custom_components/groupalarm/
+custom_components/homeassistantalarm/
 ├── api.py           # GroupAlarmClient: /status, /poll, /stream (SSE-Parsing)
 ├── coordinator.py    # GroupAlarmConnection: Aufhol-Poll + Stream-Loop, Dedupe, Persistenz
 ├── config_flow.py    # Setup-Dialog + Reauth-Flow
@@ -77,16 +79,13 @@ custom_components/groupalarm/
    Vor allem prüfen: Config-Flow (inkl. Fehlerfälle 401/404/Timeout),
    SSE-Parsing gegen einen echten oder gemockten Stream, Reconnect-
    Verhalten, Reauth-Flow, Sensor-Attribute.
-2. **`manifest.json` enthält Platzhalter** (`your-github-username`) bei
-   `codeowners`, `documentation`, `issue_tracker` – vor Veröffentlichung
-   durch echte GitHub-Angaben ersetzen.
-3. **Keine automatisierten Tests** (kein `tests/`-Verzeichnis, kein
+2. **Keine automatisierten Tests** (kein `tests/`-Verzeichnis, kein
    pytest-Setup à la `pytest-homeassistant-custom-component`).
-4. **Keine CI.** Für HACS-Veröffentlichung sinnvoll: GitHub Actions mit
+3. **Keine CI.** Für HACS-Veröffentlichung sinnvoll: GitHub Actions mit
    `home-assistant/actions/hassfest` und `hacs/action`.
-5. **Keine dynamische Organisations-Sensor-Erstellung** zur Laufzeit (siehe
+4. **Keine dynamische Organisations-Sensor-Erstellung** zur Laufzeit (siehe
    Architektur-Punkt oben).
-6. **`iot_class: cloud_push`** in `manifest.json` – korrekt, da der
+5. **`iot_class: cloud_push`** in `manifest.json` – korrekt, da der
    Normalbetrieb über SSE läuft; falls sich das Verhalten grundlegend
    ändert, diesen Wert mit anpassen (HACS/hassfest validiert das gegen die
    tatsächliche Update-Methode nicht streng, aber es ist die für Nutzer
@@ -97,7 +96,7 @@ custom_components/groupalarm/
 1. Lokale HA-Dev-Umgebung aufsetzen (am einfachsten: offizieller
    [HA VS Code Devcontainer](https://developers.home-assistant.io/docs/development_environment)
    oder `pip install homeassistant` in einem venv) und
-   `custom_components/groupalarm` einbinden, Config-Flow manuell
+   `custom_components/homeassistantalarm` einbinden, Config-Flow manuell
    durchklicken.
 2. `hassfest` lokal laufen lassen (`python -m script.hassfest`, aus einem
    HA-Core-Checkout heraus) zur Manifest-/Struktur-Validierung.

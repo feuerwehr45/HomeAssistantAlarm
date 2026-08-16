@@ -63,8 +63,10 @@ class GroupAlarmConnection:
         stored = await self._store.async_load()
         if stored:
             self._latest_id = stored.get("latest_id", 0)
+            self.last_alarm = stored.get("last_alarm")
+            self.last_alarm_by_org = stored.get("last_alarm_by_org", {})
         self._task = self.hass.async_create_background_task(
-            self._async_run(), f"groupalarm-{self.entry.entry_id}"
+            self._async_run(), f"homeassistantalarm-{self.entry.entry_id}"
         )
 
     async def async_stop(self) -> None:
@@ -78,7 +80,13 @@ class GroupAlarmConnection:
                 pass
 
     async def _async_save(self) -> None:
-        await self._store.async_save({"latest_id": self._latest_id})
+        await self._store.async_save(
+            {
+                "latest_id": self._latest_id,
+                "last_alarm": self.last_alarm,
+                "last_alarm_by_org": self.last_alarm_by_org,
+            }
+        )
 
     def _set_available(self, available: bool) -> None:
         if self.available != available:

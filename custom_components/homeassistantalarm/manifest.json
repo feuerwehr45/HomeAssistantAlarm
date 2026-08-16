@@ -1,0 +1,12 @@
+{
+  "domain": "homeassistantalarm",
+  "name": "HomeAssistantAlarm",
+  "codeowners": ["@feuerwehr45"],
+  "config_flow": true,
+  "documentation": "https://github.com/feuerwehr45/HomeAssistantAlarm",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/feuerwehr45/HomeAssistantAlarm/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -15,7 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.helpers.entity import DeviceInfo, EntityCategory
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import GroupAlarmConfigEntry
@@ -57,7 +57,6 @@ class _GroupAlarmBaseSensor(SensorEntity):
     """Common device grouping for all sensors of one config entry."""
 
     _attr_should_poll = False
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:alarm-light"
 
     def __init__(self, entry: ConfigEntry, connection) -> None:

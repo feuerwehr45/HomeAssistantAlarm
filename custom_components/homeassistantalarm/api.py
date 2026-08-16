@@ -125,7 +125,7 @@ class GroupAlarmClient:
                         continue  # heartbeat comment
                     if line == "":
                         if event_name and data_lines:
-                            payload = json.loads("".join(data_lines))
+                            payload = json.loads("\n".join(data_lines))
                             yield event_name, payload
                             if event_name == "error":
                                 raise GroupAlarmAuthError(

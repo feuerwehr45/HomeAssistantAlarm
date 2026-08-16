@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from homeassistant.const import Platform
 
-DOMAIN = "groupalarm"
+DOMAIN = "homeassistantalarm"
 
 CONF_UUID = "uuid"
 
@@ -23,4 +23,4 @@ MAX_BACKOFF = 30
 STREAM_HEARTBEAT_TIMEOUT = 60  # server heartbeat is every 25s
 
 STORAGE_VERSION = 1
-STORAGE_KEY_TEMPLATE = "groupalarm_{entry_id}"
+STORAGE_KEY_TEMPLATE = "homeassistantalarm_{entry_id}"
