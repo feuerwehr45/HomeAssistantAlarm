@@ -48,15 +48,16 @@ kopieren und Home Assistant neu starten.
    - Selbst gehostet: `http://<server>:<port>` (Standardport `7000`)
 4. Die Zuordnung der Verbindung zu GroupAlarm-Organisationen erfolgt
    ausschließlich im GroupAlarm-Webinterface (*Schatten-Organisationen*).
-   Wird die Zuordnung nach der Einrichtung geändert, muss die Integration
-   neu geladen werden (*Einstellungen → Geräte & Dienste → HomeAssistantAlarm →
-   Neu laden*), damit neue Organisations-Sensoren angelegt werden.
+   Wird die Zuordnung nach der Einrichtung geändert, erkennt die Integration
+   neu hinzugefügte Organisationen automatisch (Prüfung alle 15 Minuten im
+   Hintergrund) und legt dafür einen neuen Sensor an – ohne dass HA neu
+   geladen werden muss.
 
 ## Was die Integration bereitstellt
 
-### Event `groupalarm_alarm`
+### Event `homeassistantalarm_alarm`
 
-Für jeden neuen Alarm wird ein Event `groupalarm_alarm` gefeuert – das ist
+Für jeden neuen Alarm wird ein Event `homeassistantalarm_alarm` gefeuert – das ist
 der primäre Mechanismus für Automationen. Payload:
 
 | Feld               | Beschreibung                                              |
@@ -75,7 +76,7 @@ automation:
   - alias: "Licht an bei Einsatz"
     trigger:
       - platform: event
-        event_type: groupalarm_alarm
+        event_type: homeassistantalarm_alarm
     action:
       - service: light.turn_on
         target:
@@ -89,7 +90,7 @@ automation:
   - alias: "Alarmierung nur für die Feuerwehr"
     trigger:
       - platform: event
-        event_type: groupalarm_alarm
+        event_type: homeassistantalarm_alarm
         event_data:
           organizationUuid: "9b1c...-org1"
     action:
@@ -108,7 +109,7 @@ automation:
 
 Alle Sensoren tragen als Attribute `id`, `organization`,
 `organization_uuid`, `timestamp` und `raw_alarm`. Sensoren dienen
-Dashboards/History – für Automationen sollte immer das `groupalarm_alarm`-
+Dashboards/History – für Automationen sollte immer das `homeassistantalarm_alarm`-
 Event genutzt werden, da Zustandsänderungen bei identischen Folge-Updates
 nicht zuverlässig auslösen.
 

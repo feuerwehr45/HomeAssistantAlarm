@@ -29,7 +29,6 @@ class GroupAlarmRuntimeData:
     """Data stored on the config entry while it is loaded."""
 
     connection: GroupAlarmConnection
-    status: dict
 
 
 GroupAlarmConfigEntry = ConfigEntry[GroupAlarmRuntimeData]
@@ -54,10 +53,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: GroupAlarmConfigEntry) -
     except (GroupAlarmConnectionError, GroupAlarmError) as err:
         raise ConfigEntryNotReady(f"Could not reach GroupAlarm server: {err}") from err
 
-    connection = GroupAlarmConnection(hass, entry, client)
+    connection = GroupAlarmConnection(
+        hass, entry, client, initial_organizations=status.get("subscribedOrganizations", [])
+    )
     await connection.async_start()
 
-    entry.runtime_data = GroupAlarmRuntimeData(connection=connection, status=status)
+    entry.runtime_data = GroupAlarmRuntimeData(connection=connection)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

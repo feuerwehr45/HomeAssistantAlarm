@@ -1,7 +1,7 @@
-"""Sensor platform for GroupAlarm.
+"""Sensor platform for HomeAssistantAlarm.
 
-Alarms are primarily surfaced as the `groupalarm_alarm` HA event (fired by
-the GroupAlarmConnection for every new alarm) - that's what automations
+Alarms are primarily surfaced as the `homeassistantalarm_alarm` HA event
+(fired by the GroupAlarmConnection for every new alarm) - that's what automations
 should trigger on. These sensors just mirror the last alarm text per
 organization (and overall) for dashboards/history, as suggested in
 docs/homeassistant-integration-api.md.
@@ -19,7 +19,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import GroupAlarmConfigEntry
-from .const import DOMAIN, SIGNAL_ALARM, SIGNAL_AVAILABILITY
+from .const import DOMAIN, SIGNAL_ALARM, SIGNAL_AVAILABILITY, SIGNAL_NEW_ORGANIZATIONS
 
 
 async def async_setup_entry(
@@ -27,18 +27,43 @@ async def async_setup_entry(
     entry: GroupAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up GroupAlarm sensors: one overall + one per subscribed organization."""
+    """Set up GroupAlarm sensors: one overall + one per subscribed organization.
+
+    New organizations added to the connection after setup are picked up in
+    the background (see GroupAlarmConnection._async_refresh_organizations)
+    and get their sensor added here too, without requiring a reload.
+    """
     runtime = entry.runtime_data
     connection = runtime.connection
-    organizations = runtime.status.get("subscribedOrganizations", [])
+    known_org_uuids: set[str] = set()
 
     entities: list[SensorEntity] = [GroupAlarmLastAlarmSensor(entry, connection)]
-    for org in organizations:
+    for org in connection.organizations:
         entities.append(
             GroupAlarmOrganizationSensor(entry, connection, org["uuid"], org["name"])
         )
+        known_org_uuids.add(org["uuid"])
 
     async_add_entities(entities)
+
+    @callback
+    def _handle_new_organizations(new_orgs: list[dict[str, Any]]) -> None:
+        new_entities = [
+            GroupAlarmOrganizationSensor(entry, connection, org["uuid"], org["name"])
+            for org in new_orgs
+            if org["uuid"] not in known_org_uuids
+        ]
+        known_org_uuids.update(org["uuid"] for org in new_orgs)
+        if new_entities:
+            async_add_entities(new_entities)
+
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass,
+            SIGNAL_NEW_ORGANIZATIONS.format(entry_id=entry.entry_id),
+            _handle_new_organizations,
+        )
+    )
 
 
 def _alarm_attributes(alarm: dict[str, Any] | None) -> dict[str, Any]:
@@ -65,7 +90,7 @@ class _GroupAlarmBaseSensor(SensorEntity):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
-            manufacturer="GroupAlarm",
+            manufacturer="HomeAssistantAlarm",
             entry_type=DeviceEntryType.SERVICE,
         )
 

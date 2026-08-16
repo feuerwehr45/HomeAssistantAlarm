@@ -45,16 +45,18 @@ Server-Seite abzugleichen).
   wird (statt erneut die letzten 50 Alarme zu bekommen) und die Sensoren
   sofort wieder den letzten Alarmtext zeigen, statt bis zum nächsten neuen
   Alarm "unknown" anzuzeigen.
-- **Sensoren nur für Organisationen, die beim Setup in
-  `subscribedOrganizations` standen** (`sensor.py` liest das aus der
-  `/status`-Antwort, die beim Config-Entry-Setup einmal geholt wird).
-  Bewusste Vereinfachung: Wird eine Organisation *nach* dem Einrichten neu
-  im GroupAlarm-Profil zugeordnet, entsteht dafür **kein** automatischer
-  neuer Sensor. Workaround für Nutzer: Integration neu laden. Falls das
-  stört, wäre der nächste Schritt, `subscribedOrganizations` regelmäßig
-  neu abzufragen (z. B. bei jedem Aufhol-Poll) und neue Sensoren dynamisch
-  per `async_add_entities` nachzuschieben.
-- **Event `groupalarm_alarm` ist der primäre Automatisierungs-Mechanismus**,
+- **Organisationen werden per Timer nachgeführt statt nur beim Setup
+  gelesen.** `GroupAlarmConnection.organizations` startet mit der
+  `/status`-Antwort vom Config-Entry-Setup und wird danach alle
+  `ORGANIZATION_REFRESH_INTERVAL` (15 Minuten, `const.py`) per
+  `async_track_time_interval` gegen `/status` abgeglichen
+  (`_async_refresh_organizations`). Neue Organisationen lösen das Signal
+  `SIGNAL_NEW_ORGANIZATIONS` aus, auf das `sensor.py` hört, um dynamisch
+  per `async_add_entities` einen neuen Organisations-Sensor nachzuschieben
+  – kein Reload nötig. Der Refresh-Fehlerfall (Server kurz nicht
+  erreichbar) wird nur geloggt (`_LOGGER.debug`), da er die primäre
+  Stream-Verbindung/Verfügbarkeit nicht beeinflussen soll.
+- **Event `homeassistantalarm_alarm` ist der primäre Automatisierungs-Mechanismus**,
   nicht die Sensor-States – auch das eine explizite Empfehlung aus der
   Server-Doku (State-Changes lösen bei identischen Folge-Updates nicht
   zuverlässig aus).
@@ -63,29 +65,50 @@ Server-Seite abzugleichen).
 
 ```
 custom_components/homeassistantalarm/
-├── api.py           # GroupAlarmClient: /status, /poll, /stream (SSE-Parsing)
-├── coordinator.py    # GroupAlarmConnection: Aufhol-Poll + Stream-Loop, Dedupe, Persistenz
-├── config_flow.py    # Setup-Dialog + Reauth-Flow
-├── __init__.py       # async_setup_entry/async_unload_entry, runtime_data
-├── sensor.py          # Letzter-Alarm-Sensor gesamt + je Organisation
-├── const.py            # Domain, Signalnamen, Defaults/Timeouts
+├── api.py             # GroupAlarmClient: /status, /poll, /stream (SSE-Parsing)
+├── coordinator.py     # GroupAlarmConnection: Aufhol-Poll + Stream-Loop, Dedupe, Persistenz
+├── config_flow.py     # Setup-Dialog + Reauth-Flow
+├── device_trigger.py  # Geraete-Trigger "Neuer Alarm" (+ optionaler Organisations-Filter) fuers Automations-UI
+├── __init__.py         # async_setup_entry/async_unload_entry, runtime_data
+├── sensor.py            # Letzter-Alarm-Sensor gesamt + je Organisation
+├── const.py              # Domain, Signalnamen, Defaults/Timeouts
 ├── manifest.json
 ├── strings.json / translations/{en,de}.json
 ```
+
+**`device_trigger.py`** macht "neuer Alarm" im Automations-Editor unter
+*Trigger → Gerät → HomeAssistantAlarm-Verbindung* durchsuchbar/auswählbar,
+statt dass Nutzer manuell einen generischen Event-Trigger mit dem
+Event-Typ konfigurieren müssen. Delegiert intern an die Core-Trigger-
+Plattform `homeassistant.components.homeassistant.triggers.event` (das
+dokumentierte Standardmuster für event-basierte Device-Trigger). Bietet
+zusätzlich optional einen Organisations-Filter (`extra_fields`), dessen
+Auswahlliste live aus `entry.runtime_data.connection.organizations` gebaut
+wird (also inklusive Organisationen, die erst nach dem Setup per
+Hintergrund-Refresh dazugekommen sind). **Wie der Rest der Integration
+ungetestet** – insbesondere die
+Importpfade (`DEVICE_TRIGGER_BASE_SCHEMA`, `event_trigger.CONF_*`) und das
+Capabilities-Schema für den Organisations-Filter sollten beim ersten
+Durchklicken im Automations-Editor geprüft werden.
+
+**Event umbenannt:** Das gefeuerte Event heißt jetzt `homeassistantalarm_alarm`
+(vorher `groupalarm_alarm`), passend zur Domain. Automationen, die bereits
+mit dem alten Event-Typ manuell angelegt wurden, müssen entweder auf
+`homeassistantalarm_alarm` aktualisiert oder auf den neuen Geräte-Trigger
+umgestellt werden.
 
 ## Bekannte Lücken / offene TODOs
 
 1. **Ungetestet.** Noch nie in einer laufenden HA-Instanz geladen worden.
    Vor allem prüfen: Config-Flow (inkl. Fehlerfälle 401/404/Timeout),
    SSE-Parsing gegen einen echten oder gemockten Stream, Reconnect-
-   Verhalten, Reauth-Flow, Sensor-Attribute.
+   Verhalten, Reauth-Flow, Sensor-Attribute, Device-Trigger und den
+   periodischen Organisations-Refresh (siehe oben).
 2. **Keine automatisierten Tests** (kein `tests/`-Verzeichnis, kein
    pytest-Setup à la `pytest-homeassistant-custom-component`).
 3. **Keine CI.** Für HACS-Veröffentlichung sinnvoll: GitHub Actions mit
    `home-assistant/actions/hassfest` und `hacs/action`.
-4. **Keine dynamische Organisations-Sensor-Erstellung** zur Laufzeit (siehe
-   Architektur-Punkt oben).
-5. **`iot_class: cloud_push`** in `manifest.json` – korrekt, da der
+4. **`iot_class: cloud_push`** in `manifest.json` – korrekt, da der
    Normalbetrieb über SSE läuft; falls sich das Verhalten grundlegend
    ändert, diesen Wert mit anpassen (HACS/hassfest validiert das gegen die
    tatsächliche Update-Methode nicht streng, aber es ist die für Nutzer

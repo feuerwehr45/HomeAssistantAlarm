@@ -70,7 +70,7 @@ class GroupAlarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (GroupAlarmConnectionError, GroupAlarmError):
                 errors["base"] = "cannot_connect"
             else:
-                title = status.get("connectionName") or "GroupAlarm"
+                title = status.get("connectionName") or "HomeAssistantAlarm"
                 return self.async_create_entry(
                     title=title,
                     data={

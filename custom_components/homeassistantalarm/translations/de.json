@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Mit GroupAlarm verbinden",
+        "title": "HomeAssistantAlarm einrichten",
         "description": "UUID und API-Key findest du im GroupAlarm-Profil unter 'Profil → HomeAssistant'.",
         "data": {
           "host": "Server-URL",
@@ -11,7 +11,7 @@
         }
       },
       "reauth_confirm": {
-        "title": "GroupAlarm erneut authentifizieren",
+        "title": "HomeAssistantAlarm erneut authentifizieren",
         "description": "Der API-Key für Verbindung {uuid} wurde abgelehnt oder existiert nicht mehr. Bitte neuen Key eingeben.",
         "data": {
           "api_key": "API-Key"
@@ -26,6 +26,14 @@
     "abort": {
       "already_configured": "Diese Verbindung ist bereits eingerichtet.",
       "reauth_successful": "Erneute Authentifizierung erfolgreich."
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "alarm": "Neuer Alarm"
+    },
+    "extra_fields": {
+      "organization_uuid": "Organisation"
     }
   }
 }

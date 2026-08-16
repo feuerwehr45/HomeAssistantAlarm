@@ -12,8 +12,9 @@ from collections import deque
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
 
 from .api import (
@@ -25,11 +26,14 @@ from .api import (
 )
 from .const import (
     DEFAULT_POLL_LIMIT,
+    EVENT_ALARM,
     MAX_BACKOFF,
     MAX_RECENT_IDS,
     MIN_BACKOFF,
+    ORGANIZATION_REFRESH_INTERVAL,
     SIGNAL_ALARM,
     SIGNAL_AVAILABILITY,
+    SIGNAL_NEW_ORGANIZATIONS,
     STORAGE_KEY_TEMPLATE,
     STORAGE_VERSION,
 )
@@ -41,7 +45,11 @@ class GroupAlarmConnection:
     """Owns the client, the poll/stream loop and the last-seen alarm state."""
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, client: GroupAlarmClient
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        client: GroupAlarmClient,
+        initial_organizations: list[dict[str, Any]],
     ) -> None:
         self.hass = hass
         self.entry = entry
@@ -49,6 +57,7 @@ class GroupAlarmConnection:
         self.available = True
         self.last_alarm: dict[str, Any] | None = None
         self.last_alarm_by_org: dict[str, dict[str, Any]] = {}
+        self.organizations: list[dict[str, Any]] = list(initial_organizations)
 
         self._store: Store = Store(
             hass, STORAGE_VERSION, STORAGE_KEY_TEMPLATE.format(entry_id=entry.entry_id)
@@ -56,6 +65,7 @@ class GroupAlarmConnection:
         self._latest_id = 0
         self._recent_ids: deque[int] = deque(maxlen=MAX_RECENT_IDS)
         self._task: asyncio.Task | None = None
+        self._unsub_org_refresh: CALLBACK_TYPE | None = None
         self._stopped = False
 
     async def async_start(self) -> None:
@@ -68,16 +78,55 @@ class GroupAlarmConnection:
         self._task = self.hass.async_create_background_task(
             self._async_run(), f"homeassistantalarm-{self.entry.entry_id}"
         )
+        self._unsub_org_refresh = async_track_time_interval(
+            self.hass, self._handle_org_refresh_interval, ORGANIZATION_REFRESH_INTERVAL
+        )
 
     async def async_stop(self) -> None:
         """Cancel the background loop."""
         self._stopped = True
+        if self._unsub_org_refresh is not None:
+            self._unsub_org_refresh()
+            self._unsub_org_refresh = None
         if self._task is not None:
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
                 pass
+
+    @callback
+    def _handle_org_refresh_interval(self, now) -> None:
+        self.hass.async_create_task(self._async_refresh_organizations())
+
+    async def _async_refresh_organizations(self) -> None:
+        """Check /status for newly subscribed organizations and announce them."""
+        try:
+            status = await self.client.async_get_status()
+        except GroupAlarmError as err:
+            _LOGGER.debug("Could not refresh organization list: %s", err)
+            return
+
+        known_uuids = {org["uuid"] for org in self.organizations}
+        new_orgs = [
+            org
+            for org in status.get("subscribedOrganizations", [])
+            if org["uuid"] not in known_uuids
+        ]
+        if not new_orgs:
+            return
+
+        self.organizations.extend(new_orgs)
+        _LOGGER.info(
+            "Found %d newly subscribed organization(s) for %s",
+            len(new_orgs),
+            self.entry.title,
+        )
+        async_dispatcher_send(
+            self.hass,
+            SIGNAL_NEW_ORGANIZATIONS.format(entry_id=self.entry.entry_id),
+            new_orgs,
+        )
 
     async def _async_save(self) -> None:
         await self._store.async_save(
@@ -109,7 +158,7 @@ class GroupAlarmConnection:
         if org_uuid:
             self.last_alarm_by_org[org_uuid] = payload
 
-        self.hass.bus.async_fire("groupalarm_alarm", payload)
+        self.hass.bus.async_fire(EVENT_ALARM, payload)
         async_dispatcher_send(
             self.hass, SIGNAL_ALARM.format(entry_id=self.entry.entry_id), payload
         )
@@ -138,7 +187,7 @@ class GroupAlarmConnection:
                 async for event_name, payload in self.client.async_stream():
                     if event_name == "connected":
                         _LOGGER.debug(
-                            "GroupAlarm stream connected: %s", payload.get("connectionName")
+                            "Stream connected: %s", payload.get("connectionName")
                         )
                         self._set_available(True)
                     elif event_name == "alarm":
@@ -149,7 +198,7 @@ class GroupAlarmConnection:
                 backoff = MIN_BACKOFF  # clean stream end, reset backoff
             except GroupAlarmAuthError:
                 _LOGGER.error(
-                    "GroupAlarm authentication failed for entry %s - starting reauth",
+                    "Authentication failed for entry %s - starting reauth",
                     self.entry.title,
                 )
                 self._set_available(False)
@@ -158,7 +207,7 @@ class GroupAlarmConnection:
                 continue
             except GroupAlarmNotFoundError:
                 _LOGGER.error(
-                    "GroupAlarm connection %s no longer exists on the server",
+                    "Connection %s no longer exists on the server",
                     self.entry.title,
                 )
                 self._set_available(False)
@@ -167,7 +216,7 @@ class GroupAlarmConnection:
                 continue
             except (GroupAlarmConnectionError, GroupAlarmError) as err:
                 _LOGGER.warning(
-                    "GroupAlarm connection issue for %s: %s (retrying in %ss)",
+                    "Connection issue for %s: %s (retrying in %ss)",
                     self.entry.title,
                     err,
                     backoff,
@@ -176,7 +225,7 @@ class GroupAlarmConnection:
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
-                _LOGGER.exception("Unexpected error in GroupAlarm connection loop")
+                _LOGGER.exception("Unexpected error in connection loop")
                 self._set_available(False)
 
             if self._stopped:
