@@ -67,7 +67,7 @@ der primäre Mechanismus für Automationen. Payload:
 | `organizationUuid` | UUID der Organisation                                       |
 | `message`          | Fertig formatierter Alarmtext                               |
 | `timestamp`        | Zeitpunkt des Alarms (ISO 8601)                              |
-| `rawAlarm`         | Rohdaten der Alarmquelle (Struktur variiert je nach Quelle)  |
+| `alarmData`        | Strukturierte Alarmdaten (Code, Stichwort, Adresse, Fahrzeuge, Koordinaten, ...) – einheitliches Format unabhängig von der Alarmquelle, siehe [`docs/homeassistant-alarm-data.md`](docs/homeassistant-alarm-data.md) |
 
 Beispiel-Automation (YAML):
 
@@ -102,16 +102,31 @@ automation:
 
 ### Sensor-Entities
 
-- **`Letzter Alarm`** – zeigt den zuletzt empfangenen Alarmtext über alle
-  freigeschalteten Organisationen hinweg.
-- **`<Organisation> letzter Alarm`** – ein Sensor je Organisation, die zum
-  Zeitpunkt der Einrichtung freigeschaltet war.
+- **`Letzter Alarm`** / **`<Organisation> letzter Alarm`** – Zeitpunkt
+  (`device_class: timestamp`) des zuletzt empfangenen Alarms, gesamt bzw.
+  je Organisation, die zum Zeitpunkt der Einrichtung freigeschaltet war
+  (neu hinzugekommene Organisationen bekommen automatisch ihren eigenen
+  Sensor, siehe oben). Der volle Alarmtext steht als Attribut
+  `full_message` zur Verfügung, dazu die strukturierten `alarmData`-Felder
+  einzeln als Attribute (`code`, `stichwort`, `adresse`, `ort`, `zusatz`,
+  `fahrzeuge`, `lat`, `lon`, `maps_link`, `prioritaet`, `datum`, `uhrzeit`)
+  sowie `id`, `organization`, `organization_uuid` und `timestamp`.
+- **`Alarmstatus`** / **`<Organisation> Alarmstatus`** – einfacher
+  Zwei-Zustands-Sensor (`Alarm` / `Kein Alarm`), gesamt bzw. je
+  Organisation. Springt bei einem neuen Alarm auf `Alarm` und fällt nach 5
+  Minuten automatisch wieder auf `Kein Alarm` zurück; ein weiterer Alarm in
+  dieser Zeit setzt die 5 Minuten neu. Gedacht für einfache
+  Dashboard-Anzeigen ("ist gerade etwas los?"), ohne dafür Automationen/
+  Templates auf Basis des Events bauen zu müssen.
+- **`Verbindung`** (`binary_sensor`, `device_class: connectivity`) – zeigt,
+  ob die Verbindung zum GroupAlarm-Server aktuell steht. Bleibt bewusst
+  immer verfügbar (siehe unten), damit auch bei einem Verbindungsausfall
+  sichtbar bleibt, *dass* er besteht.
 
-Alle Sensoren tragen als Attribute `id`, `organization`,
-`organization_uuid`, `timestamp` und `raw_alarm`. Sensoren dienen
-Dashboards/History – für Automationen sollte immer das `homeassistantalarm_alarm`-
-Event genutzt werden, da Zustandsänderungen bei identischen Folge-Updates
-nicht zuverlässig auslösen.
+Die Alarm- und Alarmstatus-Sensoren dienen Dashboards/History – für
+Automationen sollte immer das `homeassistantalarm_alarm`-Event genutzt
+werden, da Zustandsänderungen bei identischen Folge-Updates nicht
+zuverlässig auslösen.
 
 ## Fehlerbehandlung
 
@@ -120,8 +135,9 @@ nicht zuverlässig auslösen.
   Authentifizierung an (*Einstellungen → Geräte & Dienste* → Hinweis bei
   der Integration).
 - Netzwerkprobleme führen zu automatischen Reconnect-Versuchen mit
-  exponentiellem Backoff; die Sensoren werden währenddessen als "nicht
-  verfügbar" markiert.
+  exponentiellem Backoff; die Alarm-/Alarmstatus-Sensoren werden
+  währenddessen als "nicht verfügbar" markiert – der `Verbindung`-Sensor
+  bleibt verfügbar und wechselt stattdessen selbst auf "Getrennt".
 
 ## API-Referenz
 
@@ -140,7 +156,9 @@ custom_components/homeassistantalarm/
 ├── config_flow.py       # Einrichtungsdialog + Reauth
 ├── const.py             # Domain, Signale, Defaults
 ├── coordinator.py       # Poll-Aufholen + Stream-Loop mit Backoff & Dedupe
-├── sensor.py             # Sensor-Entities
+├── device_trigger.py     # Geräte-Trigger "Neuer Alarm" fürs Automations-UI
+├── sensor.py              # Letzter-Alarm- und Alarmstatus-Sensoren
+├── binary_sensor.py        # Verbindungs-Sensor
 ├── strings.json / translations/  # UI-Texte (en/de)
 └── manifest.json
 ```
