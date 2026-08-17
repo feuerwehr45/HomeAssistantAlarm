@@ -6,18 +6,48 @@ weiterarbeiten. Sie hält fest, was gebaut wurde, warum, und was als
 Nächstes ansteht. Nutzerdoku (Installation/Einrichtung) steht in der
 [README](../README.md).
 
-## Status (Stand: 2026-08-16)
+## Status (Stand: 2026-08-17)
 
-Erstimplementierung abgeschlossen, **aber noch nie gegen eine echte
-Home-Assistant-Instanz getestet** – auf der Entwicklungsmaschine war kein
-Python verfügbar, es gab nur eine statische Prüfung des Codes (Lesen +
-manuelle Konsistenzprüfung der Importe/Signaturen). Vor produktivem Einsatz
-unbedingt in einer echten HA-Dev-Umgebung durchspielen (siehe "Nächste
-Schritte" unten).
+Erste Live-Tests gegen eine echte Home-Assistant-Instanz liefen erfolgreich
+(bis auf den unten beschriebenen State-Length-Bug). Nach wie vor keine
+automatisierten Tests/CI (siehe "Bekannte Lücken" unten).
 
 Die Implementierung folgt strikt [`docs/homeassistant-integration-api.md`](homeassistant-integration-api.md)
 (Server-API-Referenz, vom Nutzer vorgegeben – nicht verändern, ohne die
-Server-Seite abzugleichen).
+Server-Seite abzugleichen) sowie der Ergänzung
+[`docs/homeassistant-alarm-data.md`](homeassistant-alarm-data.md) (`rawAlarm`
+→ `alarmData`, strukturierte Felder statt quellenabhängiger Rohdaten).
+
+### Bugfix 2026-08-17: State-Length-Limit riss Updates bei langen Alarmtexten ab
+
+Beim ersten Live-Test blieb der Sensor-State bei einer Organisation auf dem
+alten Alarm stehen, während andere Organisationen normal aktualisierten –
+einziger auffälliger Unterschied war ein deutlich längerer Alarmtext bei der
+betroffenen Organisation. Ursache: `sensor.py` hat den kompletten `message`-
+Text unverändert als `native_value` (= HA-Entity-State) verwendet. HA
+validiert Entity-States serverseitig auf maximal 255 Zeichen
+(`homeassistant/core.py`, `State`); bei Überschreitung wirft
+`async_write_ha_state()` einen `InvalidStateError`, der State bleibt auf dem
+vorherigen Wert stehen – **kein** sichtbarer Fehler in der UI, nur ein Log-
+Eintrag.
+
+Erster Fix-Versuch war, `native_value` auf 255 Zeichen zu kappen (`…`-Suffix)
+– funktioniert, bleibt aber ein Pflaster, da ein noch längerer Text das
+Problem jederzeit wieder auslösen könnte. Stattdessen (Vorschlag des
+Nutzers) liefert `native_value` von `GroupAlarmLastAlarmSensor` und
+`GroupAlarmOrganizationSensor` jetzt **den Alarm-Zeitpunkt** (`sensor._alarm_timestamp()`,
+geparst aus dem ISO8601-Feld `timestamp` via `homeassistant.util.dt.parse_datetime`),
+mit `_attr_device_class = SensorDeviceClass.TIMESTAMP`. Das schließt das
+255-Zeichen-Problem strukturell aus (ein ISO-Zeitstempel ist nie auch nur
+annähernd so lang) und zeigt in der HA-UI direkt an, wann der letzte Alarm
+war (lokalisiert/relativ dank `device_class: timestamp`). Der volle
+Alarmtext bleibt weiterhin über das Attribut `full_message` verfügbar.
+
+**Migrationshinweis:** Für bestehende Installationen ändert sich damit der
+State-Typ dieser beiden Entities von Text auf Timestamp – der History-Graph
+zeigt an dieser Stelle einen Bruch (alte String-States, neue Datetime-States).
+Unkritisch, da die Integration noch nicht veröffentlicht ist, aber gut zu
+wissen, falls es nach einem Update auffällt.
 
 ## Architektur-Entscheidungen & Begründung
 
@@ -60,6 +90,46 @@ Server-Seite abzugleichen).
   nicht die Sensor-States – auch das eine explizite Empfehlung aus der
   Server-Doku (State-Changes lösen bei identischen Folge-Updates nicht
   zuverlässig aus).
+- **"Alarmstatus"-Sensoren (`"Alarm"`/`"Kein Alarm"`), einer je Organisation
+  plus ein Gesamt-Sensor**, ergänzend zu den bestehenden Text-Sensoren mit
+  dem letzten Alarmtext. Nutzerwunsch: eine einfache, dashboard-taugliche
+  Zwei-Zustands-Anzeige, die nach einem Alarm 5 Minuten (`ALARM_ACTIVE_DURATION`,
+  `const.py`) auf `"Alarm"` bleibt und dann automatisch zurückfällt; ein
+  erneuter Alarm während der aktiven Phase setzt den Timer neu (kein
+  Aufaddieren). Umgesetzt in `GroupAlarmConnection._activate_alarm_status()`
+  über `async_call_later` pro Schlüssel (Organisations-UUID oder
+  `ALARM_STATUS_OVERALL_KEY` fürs Gesamt), Reset-Timer wird bei erneutem
+  Alarm für denselben Schlüssel gecancelt und neu gestartet.
+  `active_alarm_keys` wird bewusst **nicht** persistiert (anders als
+  `last_alarm`/`latest_id`) – nach einem HA-Neustart ist "kein Alarm" der
+  sichere Default, da nicht mehr rekonstruierbar ist, wie viel vom
+  5-Minuten-Fenster noch übrig wäre.
+  **Bekannte Einschränkung (nicht neu, betrifft auch das Event):** Der
+  Aufhol-Poll beim Start/Reconnect (`_async_catch_up`) kann ältere,
+  während einer Downtime aufgelaufene Alarme nachliefern – dafür wird der
+  Alarmstatus (wie auch das Event) genauso aktiviert, als wäre der Alarm
+  gerade jetzt eingetroffen. Bei einer kurzen Downtime unkritisch, bei einer
+  langen mit vielen nachgelieferten Alarmen theoretisch verwirrend
+  (Status springt beim Neustart kurz auf "Alarm" für einen Alarm, der
+  Stunden zurückliegt). Bisher nicht behoben, da unklar, ob das in der
+  Praxis stört – ggf. Alarme mit `timestamp` älter als
+  `ALARM_ACTIVE_DURATION` beim Catch-up von der Statusaktivierung
+  ausnehmen, falls das im Live-Betrieb auffällt.
+- **Verbindungs-Sensor (`binary_sensor.py`, `GroupAlarmConnectivitySensor`),
+  `device_class: connectivity`, `entity_category: diagnostic`.** Nutzerwunsch:
+  sichtbar haben, ob die Verbindung zum Server noch steht. Bewusst als
+  eigene Plattform (`PLATFORMS` in `const.py` um `Platform.BINARY_SENSOR`
+  erweitert) statt als weiterer `sensor.py`-Sensor, weil `device_class:
+  connectivity` das idiomatische HA-Muster dafür ist (On/Off, passendes
+  Icon, lokalisiertes "Verbunden"/"Getrennt" in der UI). Wichtiger
+  Unterschied zu allen anderen Entities dieser Integration: Diese Entity
+  bindet ihre eigene `available`-Property **nicht** an
+  `GroupAlarmConnection.available` (anders als `_GroupAlarmBaseSensor` in
+  `sensor.py`) – sie liest den Wert stattdessen nur als `is_on`. Würde sie
+  wie die Alarm-Sensoren bei Verbindungsverlust selbst auf "nicht verfügbar"
+  gehen, gäbe es keine Entity mehr, die überhaupt anzeigt, *dass* die
+  Verbindung weg ist. Hört auf dasselbe `SIGNAL_AVAILABILITY`-Signal wie die
+  bestehenden Sensoren, um sich bei Statusänderungen neu zu rendern.
 
 ## Dateiübersicht
 
@@ -70,7 +140,8 @@ custom_components/homeassistantalarm/
 ├── config_flow.py     # Setup-Dialog + Reauth-Flow
 ├── device_trigger.py  # Geraete-Trigger "Neuer Alarm" (+ optionaler Organisations-Filter) fuers Automations-UI
 ├── __init__.py         # async_setup_entry/async_unload_entry, runtime_data
-├── sensor.py            # Letzter-Alarm-Sensor gesamt + je Organisation
+├── sensor.py            # Letzter-Alarm-Sensor + Alarmstatus-Sensor, je gesamt und pro Organisation
+├── binary_sensor.py      # Verbindungs-Sensor (device_class connectivity), immer verfuegbar
 ├── const.py              # Domain, Signalnamen, Defaults/Timeouts
 ├── manifest.json
 ├── strings.json / translations/{en,de}.json
@@ -99,11 +170,17 @@ umgestellt werden.
 
 ## Bekannte Lücken / offene TODOs
 
-1. **Ungetestet.** Noch nie in einer laufenden HA-Instanz geladen worden.
-   Vor allem prüfen: Config-Flow (inkl. Fehlerfälle 401/404/Timeout),
-   SSE-Parsing gegen einen echten oder gemockten Stream, Reconnect-
-   Verhalten, Reauth-Flow, Sensor-Attribute, Device-Trigger und den
-   periodischen Organisations-Refresh (siehe oben).
+1. **Neue Sensoren/Änderungen vom 2026-08-17 noch nicht live getestet.** Der
+   Grundbetrieb (Config-Flow, Stream, Reconnect) sowie die Text-Sensoren
+   sind im Live-Betrieb bestätigt; noch ungetestet sind:
+   `GroupAlarmOverallStatusSensor`/`GroupAlarmOrganizationStatusSensor`
+   (5-Minuten-Timer, Reset-Verhalten bei Folgealarmen), die Umstellung von
+   `native_value` auf `device_class: timestamp` bei den Letzter-Alarm-
+   Sensoren, die Umstellung von `rawAlarm` auf `alarmData` in
+   `_alarm_attributes()`, sowie der neue `GroupAlarmConnectivitySensor`
+   (`binary_sensor.py`) inkl. der neuen `Platform.BINARY_SENSOR`-Plattform.
+   Device-Trigger ebenfalls weiterhin ungetestet (Importpfade,
+   Capabilities-Schema).
 2. **Keine automatisierten Tests** (kein `tests/`-Verzeichnis, kein
    pytest-Setup à la `pytest-homeassistant-custom-component`).
 3. **Keine CI.** Für HACS-Veröffentlichung sinnvoll: GitHub Actions mit

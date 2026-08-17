@@ -14,7 +14,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.storage import Store
 
 from .api import (
@@ -25,6 +25,8 @@ from .api import (
     GroupAlarmNotFoundError,
 )
 from .const import (
+    ALARM_ACTIVE_DURATION,
+    ALARM_STATUS_OVERALL_KEY,
     DEFAULT_POLL_LIMIT,
     EVENT_ALARM,
     MAX_BACKOFF,
@@ -32,6 +34,7 @@ from .const import (
     MIN_BACKOFF,
     ORGANIZATION_REFRESH_INTERVAL,
     SIGNAL_ALARM,
+    SIGNAL_ALARM_STATUS,
     SIGNAL_AVAILABILITY,
     SIGNAL_NEW_ORGANIZATIONS,
     STORAGE_KEY_TEMPLATE,
@@ -58,6 +61,7 @@ class GroupAlarmConnection:
         self.last_alarm: dict[str, Any] | None = None
         self.last_alarm_by_org: dict[str, dict[str, Any]] = {}
         self.organizations: list[dict[str, Any]] = list(initial_organizations)
+        self.active_alarm_keys: set[str] = set()
 
         self._store: Store = Store(
             hass, STORAGE_VERSION, STORAGE_KEY_TEMPLATE.format(entry_id=entry.entry_id)
@@ -66,6 +70,7 @@ class GroupAlarmConnection:
         self._recent_ids: deque[int] = deque(maxlen=MAX_RECENT_IDS)
         self._task: asyncio.Task | None = None
         self._unsub_org_refresh: CALLBACK_TYPE | None = None
+        self._status_reset_unsubs: dict[str, CALLBACK_TYPE] = {}
         self._stopped = False
 
     async def async_start(self) -> None:
@@ -88,6 +93,9 @@ class GroupAlarmConnection:
         if self._unsub_org_refresh is not None:
             self._unsub_org_refresh()
             self._unsub_org_refresh = None
+        for unsub in self._status_reset_unsubs.values():
+            unsub()
+        self._status_reset_unsubs.clear()
         if self._task is not None:
             self._task.cancel()
             try:
@@ -162,6 +170,40 @@ class GroupAlarmConnection:
         async_dispatcher_send(
             self.hass, SIGNAL_ALARM.format(entry_id=self.entry.entry_id), payload
         )
+
+        self._activate_alarm_status(ALARM_STATUS_OVERALL_KEY)
+        if org_uuid:
+            self._activate_alarm_status(org_uuid)
+
+    def _activate_alarm_status(self, key: str) -> None:
+        """Flip a status key to "active" and (re)start its 5-minute reset timer.
+
+        A second alarm for the same key while it's already active restarts
+        the window instead of stacking - the status sensor just reflects
+        "was there an alarm in roughly the last 5 minutes".
+        """
+        existing_unsub = self._status_reset_unsubs.pop(key, None)
+        if existing_unsub is not None:
+            existing_unsub()
+
+        was_active = key in self.active_alarm_keys
+        self.active_alarm_keys.add(key)
+
+        @callback
+        def _reset(_now) -> None:
+            self._status_reset_unsubs.pop(key, None)
+            self.active_alarm_keys.discard(key)
+            async_dispatcher_send(
+                self.hass, SIGNAL_ALARM_STATUS.format(entry_id=self.entry.entry_id), key
+            )
+
+        self._status_reset_unsubs[key] = async_call_later(
+            self.hass, ALARM_ACTIVE_DURATION.total_seconds(), _reset
+        )
+        if not was_active:
+            async_dispatcher_send(
+                self.hass, SIGNAL_ALARM_STATUS.format(entry_id=self.entry.entry_id), key
+            )
 
     async def _async_catch_up(self) -> None:
         """Poll everything since the last known id."""
