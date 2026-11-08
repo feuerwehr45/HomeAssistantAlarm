@@ -6,7 +6,7 @@ weiterarbeiten. Sie hält fest, was gebaut wurde, warum, und was als
 Nächstes ansteht. Nutzerdoku (Installation/Einrichtung) steht in der
 [README](../README.md).
 
-## Status (Stand: 2026-11-08, Version 0.4.0, Branch `alarmserver`)
+## Status (Stand: 2026-11-08, Version 0.4.0, released)
 
 Umgestellt vom abgeschalteten GroupAlarm-Server (V2) auf den **AlarmServer**
 (`https://alarm.feuerwehr45.de`, Repository `GroupAlarmV2`, Paket

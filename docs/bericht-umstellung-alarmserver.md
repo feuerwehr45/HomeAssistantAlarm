@@ -63,31 +63,31 @@ Org-Refresh per Timer, Verhalten unter HA 2024.12.
 
 ## Abnahme mit Thomas
 
+**Abnahme am 2026-11-08 vollständig bestanden** (Thomas, mit `v0.4.0-beta.1`, Server-URL ohne `/api/...`).
+Danach Release `v0.4.0` (enthält zusätzlich die URL-Kürzung).
+
 Thomas testet seit 2026-11-08 mit `v0.4.0-beta.1` (HACS-Pre-Release, Branch-Auswahl liess HACS
 nicht zu). Bisher bestätigt: Umkonfigurieren klappt (mit Server-URL ohne `/api/...`, siehe
 Offene Punkte), ein Probelauf kam an. Organisationen, die erst nach dem Umkonfigurieren
 abonniert wurden, erschienen nach „Neu laden“ (sonst nach spätestens 15 Minuten). Von Claude
 wurde an Thomas' HomeAssistant und am AlarmServer nichts geändert.
 
-- [ ] Umkonfigurieren des bestehenden Eintrags klappt, die Gesamt-Entities behalten ihre IDs
-- [ ] Nach dem Umkonfigurieren feuert kein Event für alte Alarme, die Sensoren zeigen den letzten
-- [ ] Stream bleibt über mehrere Heartbeats stehen; nach HA-Neustart Neuverbindung + Aufholen
-- [ ] Probelauf zweimal hintereinander: beide als Event (`id: -1`, `test: true`)
-- [ ] Test-Alarm „nur an mich“: Event mit eigener `id`, `test: true`, Alarmstatus „Alarm“
-- [ ] Weiterer `/poll` liefert ihn nicht noch einmal
-- [ ] AlarmServer zeigt genau eine offene Verbindung
-- [ ] Alte Org-Geräte/Entities aus V2 lassen sich löschen
+- [x] Umkonfigurieren des bestehenden Eintrags klappt, die Gesamt-Entities behalten ihre IDs
+- [x] Nach dem Umkonfigurieren feuert kein Event für alte Alarme, die Sensoren zeigen den letzten
+- [x] Stream bleibt über mehrere Heartbeats stehen; nach HA-Neustart Neuverbindung + Aufholen
+- [x] Probelauf zweimal hintereinander: beide als Event (`id: -1`, `test: true`)
+- [x] Test-Alarm „nur an mich“: Event mit eigener `id`, `test: true`, Alarmstatus „Alarm“
+- [x] Weiterer `/poll` liefert ihn nicht noch einmal
+- [x] AlarmServer zeigt genau eine offene Verbindung
+- [x] Alte Org-Geräte/Entities aus V2 lassen sich löschen
 
 ## Offene Punkte
 
 - **Gefunden bei der Abnahme (beta.1):** Die im Profil angezeigte „Basis-URL“ enthält
   `/api/homeassistant/<uuid>`. Als Server-URL eingetragen, führte das zu „Ungültiger API-Key“
   (401 von Spring Security für den doppelten Pfad). Die Integration kürzt die URL jetzt selbst
-  (`normalize_base_url`, auf `alarmserver` gepusht, noch nicht als Beta veröffentlicht). Für den
+  (`normalize_base_url`, enthalten in `v0.4.0`). Für den
   AlarmServer: Anzeige im Profil oder `docs/homeassistant-integration-api.md` angleichen.
 
-- Abnahme (oben), danach Merge nach `main`, Tag `v0.4.0`, GitHub-Release – nur nach
-  Thomas' OK. `gh` ist auf dem Rechner nicht installiert; für `gh release create`
-  installieren oder das Release in der GitHub-Oberfläche anlegen.
 - CI (hassfest, HACS-Action, Tests) fehlt weiterhin.
 - Später: Alarm-Monitore (M10b) als eigene Geräte/`button`-Plattform.
