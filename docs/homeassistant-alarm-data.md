@@ -36,7 +36,7 @@ einzige Modus.
 
 - `GET /homeassistant/{uuid}/stream` – im `data`-Feld jedes `alarm`-Events
 - `GET /homeassistant/{uuid}/poll` – in jedem Eintrag von `alarms[]`
-- `POST /api/profile/homeassistant/{uuid}/test` (Testalarm im Profil) – im Response-Feld `alarm`
+- `POST /api/me/contacts/{uuid}/test` (Testalarm im Profil, V2: `POST /api/profile/homeassistant/{uuid}/test`) – im Response-Feld `alarm`
 
 ## Feldreferenz
 
@@ -54,7 +54,7 @@ einzige Modus.
 | `prioritaet` | string             | Dringlichkeit/Severity aus der Alarmquelle, falls vorhanden. Sonst leerer String. |
 | `datum`      | string             | Alarmdatum, Format `dd.MM.yyyy` (z.B. `"16.08.2026"`).                        |
 | `uhrzeit`    | string             | Alarmzeit, Format `HH:mm` (z.B. `"20:45"`).                                    |
-| `test`       | boolean            | **Nur bei Testalarmen vorhanden** (`true`). Fehlt bei echten Alarmen komplett. |
+| `test`       | boolean            | `true` bei Test-Alarmen, sonst `false`. Seit dem AlarmServer immer vorhanden (auch auf oberster Ebene des Eintrags). |
 
 Felder, die sich aus den Rohdaten nicht ermitteln lassen, werden nicht weggelassen, sondern als
 leerer String (`""`) bzw. bei `lat`/`lon`/`maps_link` als `null` geliefert – die Integration muss also
@@ -84,8 +84,10 @@ ankommt:
     "maps_link": "https://www.google.com/maps/search/?api=1&query=52.520008,13.404954",
     "prioritaet": "Hoch",
     "datum": "16.08.2026",
-    "uhrzeit": "20:45"
-  }
+    "uhrzeit": "20:45",
+    "test": false
+  },
+  "test": false
 }
 ```
 
@@ -111,8 +113,10 @@ Ein Alarm ohne bekannte Koordinaten (z.B. weil die Alarmquelle keine `optionalCo
     "maps_link": null,
     "prioritaet": "",
     "datum": "16.08.2026",
-    "uhrzeit": "21:10"
-  }
+    "uhrzeit": "21:10",
+    "test": false
+  },
+  "test": false
 }
 ```
 
@@ -145,7 +149,9 @@ Ein Testalarm (ausgelöst über den "Testen"-Button im Profil) – erkennbar an 
 }
 ```
 
-## Betroffene Server-Dateien (für spätere Nachvollziehbarkeit)
+## Betroffene Server-Dateien in V2 (für spätere Nachvollziehbarkeit)
+
+Im AlarmServer liegt das in `channel.homeassistant` (`HomeAssistantAlarm`).
 
 - `src/main/java/org/groupalarm/organization/OrganizationManager.java` – neue Methode
   `buildHomeAssistantAlarmData()`, genutzt von `pushAlarmToHomeAssistant()` (Live-SSE) und

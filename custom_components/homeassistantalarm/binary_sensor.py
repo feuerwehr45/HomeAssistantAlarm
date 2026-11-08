@@ -33,7 +33,7 @@ async def async_setup_entry(
 
 
 class GroupAlarmConnectivitySensor(BinarySensorEntity):
-    """Whether the poll/stream connection to the GroupAlarm server is up.
+    """Whether the poll/stream connection to the AlarmServer is up.
 
     Deliberately does NOT tie its own `available` to
     GroupAlarmConnection.available the way the sensor.py entities do -

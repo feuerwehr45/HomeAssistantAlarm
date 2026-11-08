@@ -30,7 +30,9 @@ from .const import (
     SIGNAL_NEW_ORGANIZATIONS,
     STATE_ALARM,
     STATE_NO_ALARM,
+    org_device_identifier,
 )
+from .coordinator import is_test_alarm
 
 
 async def async_setup_entry(
@@ -38,7 +40,7 @@ async def async_setup_entry(
     entry: GroupAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up GroupAlarm sensors: one overall + one per subscribed organization.
+    """Set up the sensors: one overall + one per subscribed organization.
 
     New organizations added to the connection after setup are picked up in
     the background (see GroupAlarmConnection._async_refresh_organizations)
@@ -114,6 +116,7 @@ def _alarm_attributes(alarm: dict[str, Any] | None) -> dict[str, Any]:
         "organization_uuid": alarm.get("organizationUuid"),
         "timestamp": alarm.get("timestamp"),
         "full_message": alarm.get("message"),
+        "test": is_test_alarm(alarm),
     }
     alarm_data = alarm.get("alarmData")
     if alarm_data:
@@ -168,6 +171,21 @@ class _GroupAlarmBaseSensor(SensorEntity):
             )
         )
 
+    def _use_org_device(self, org_uuid: str, org_name: str) -> None:
+        """Attach this entity to its own organization device.
+
+        Org devices hang below the connection device (via_device) and can be
+        deleted in the UI once the organization is no longer subscribed
+        (async_remove_config_entry_device in __init__.py).
+        """
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, org_device_identifier(self._entry.entry_id, org_uuid))},
+            name=org_name,
+            manufacturer="HomeAssistantAlarm",
+            entry_type=DeviceEntryType.SERVICE,
+            via_device=(DOMAIN, self._entry.entry_id),
+        )
+
     @property
     def available(self) -> bool:
         return self._connection.available
@@ -214,6 +232,7 @@ class GroupAlarmOrganizationSensor(_GroupAlarmBaseSensor):
     ) -> None:
         super().__init__(entry, connection)
         self._org_uuid = org_uuid
+        self._use_org_device(org_uuid, org_name)
         self._attr_name = f"{org_name} letzter Alarm"
         self._attr_unique_id = f"{entry.entry_id}_{org_uuid}_last_alarm"
 
@@ -291,6 +310,7 @@ class GroupAlarmOrganizationStatusSensor(_GroupAlarmStatusSensorBase):
     ) -> None:
         super().__init__(entry, connection)
         self._org_uuid = org_uuid
+        self._use_org_device(org_uuid, org_name)
         self._attr_name = f"{org_name} Alarmstatus"
         self._attr_unique_id = f"{entry.entry_id}_{org_uuid}_status"
 
