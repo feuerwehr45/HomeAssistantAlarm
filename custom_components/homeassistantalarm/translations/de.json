@@ -3,7 +3,16 @@
     "step": {
       "user": {
         "title": "HomeAssistantAlarm einrichten",
-        "description": "UUID und API-Key findest du im GroupAlarm-Profil unter 'Profil → HomeAssistant'.",
+        "description": "Lege im AlarmServer unter 'Profil → Kontakt hinzufügen → HomeAssistant' eine Verbindung an. Dort stehen Server-URL, UUID und API-Key (der Key nur einmal). Danach die Verbindung unter 'Abos' für deine Organisationen einschalten.",
+        "data": {
+          "host": "Server-URL",
+          "uuid": "Verbindungs-UUID",
+          "api_key": "API-Key"
+        }
+      },
+      "reconfigure": {
+        "title": "HomeAssistantAlarm umkonfigurieren",
+        "description": "Server, Verbindungs-UUID oder API-Key dieses Eintrags ändern. Die Gesamt-Entities und ihre Entity-IDs bleiben erhalten. Ändern sich Server oder UUID, werden die auf dem neuen Server vorhandenen Alarme nur in die Sensoren übernommen, ohne Events.",
         "data": {
           "host": "Server-URL",
           "uuid": "Verbindungs-UUID",
@@ -21,11 +30,28 @@
     "error": {
       "invalid_auth": "Ungültiger API-Key.",
       "not_found": "Unbekannte Verbindungs-UUID.",
+      "rate_limited": "Zu viele Fehlversuche, der Server sperrt kurz. Bitte in einer Minute erneut versuchen.",
       "cannot_connect": "Server nicht erreichbar."
     },
     "abort": {
       "already_configured": "Diese Verbindung ist bereits eingerichtet.",
-      "reauth_successful": "Erneute Authentifizierung erfolgreich."
+      "reauth_successful": "Erneute Authentifizierung erfolgreich.",
+      "reconfigure_successful": "Umkonfiguration erfolgreich."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HomeAssistantAlarm-Optionen",
+        "data": {
+          "max_age_minutes": "Höchstalter für Events (Minuten)",
+          "test_activates_status": "Test-Alarme setzen den Alarmstatus"
+        },
+        "data_description": {
+          "max_age_minutes": "Ältere Alarme (z.B. nach einem Ausfall nachgeholt) aktualisieren nur die Sensoren, ohne Event und ohne Alarmstatus. 0 schaltet die Prüfung ab.",
+          "test_activates_status": "Test-Alarme lösen immer das Event aus (mit test: true). Diese Option legt fest, ob sie auch die Alarmstatus-Sensoren auf 'Alarm' setzen."
+        }
+      }
     }
   },
   "device_automation": {

@@ -3,7 +3,16 @@
     "step": {
       "user": {
         "title": "Set up HomeAssistantAlarm",
-        "description": "Find the UUID and API key in your GroupAlarm profile under 'Profile → HomeAssistant'.",
+        "description": "Create a connection on the AlarmServer under 'Profile → Add contact → HomeAssistant'. Server URL, UUID and API key are shown there (the key only once). Then enable the connection for your organizations under 'Subscriptions'.",
+        "data": {
+          "host": "Server URL",
+          "uuid": "Connection UUID",
+          "api_key": "API key"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure HomeAssistantAlarm",
+        "description": "Change server, connection UUID or API key of this entry. The overall entities and their entity IDs are kept. If server or UUID change, alarms already on the new server are only taken over into the sensors, without events.",
         "data": {
           "host": "Server URL",
           "uuid": "Connection UUID",
@@ -21,11 +30,28 @@
     "error": {
       "invalid_auth": "Invalid API key.",
       "not_found": "Unknown connection UUID.",
+      "rate_limited": "Too many failed attempts, the server is blocking for a moment. Please try again in a minute.",
       "cannot_connect": "Could not reach the server."
     },
     "abort": {
       "already_configured": "This connection is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HomeAssistantAlarm options",
+        "data": {
+          "max_age_minutes": "Max. alarm age for events (minutes)",
+          "test_activates_status": "Test alarms set the alarm status"
+        },
+        "data_description": {
+          "max_age_minutes": "Older alarms (e.g. caught up after a downtime) only update the sensors, without event and alarm status. 0 disables the check.",
+          "test_activates_status": "Test alarms always fire the event (with test: true). This decides whether they also switch the alarm status sensors to 'Alarm'."
+        }
+      }
     }
   },
   "device_automation": {
