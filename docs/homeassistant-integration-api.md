@@ -28,14 +28,16 @@ dem die Integration implementiert wird – nicht an den GroupAlarm-Server selbst
   auch `/poll` liefern Einträge in identischer Form (gleiche Feldnamen, gleiche `id`) – die Integration
   kann Alarme aus beiden Quellen anhand der `id` deduplizieren, falls z.B. ein per SSE bereits
   empfangener Alarm durch den Aufhol-Poll nach einem Reconnect erneut auftaucht.
+- **`alarmData` ist immer gleich strukturiert**, unabhängig von der Alarmquelle (ALAMOS/GROUPALARM).
+  Details und ein vollständiges Beispiel siehe
+  [`homeassistant-alarm-data.md`](homeassistant-alarm-data.md).
 
 ## Basis-URL
 
-Von `getApiBaseUrl()` im GroupAlarm-Webinterface übernommen bzw. im Profil unter der Verbindung
-angezeigt:
+Im Profil unter der Verbindung angezeigt:
 
-- Produktiv: `https://api.groupalarm.org`
-- Selbst gehostet: `http://<server>:<port>` (Standardport 7000), z.B. `http://192.168.1.10:7000`
+- Produktiv (AlarmServer): `https://alarm.feuerwehr45.de`
+- Selbst gehostet: `http://<server>:<port>` (Standardport 8080), z.B. `http://192.168.1.10:8080`
 
 Alle Pfade unten sind relativ zu `<BASE_URL>/api`.
 
@@ -50,7 +52,9 @@ Authorization: Bearer <api_key>
 
 - Fehlt der Header oder ist er falsch formatiert → `401` `{"error": "Authorization: Bearer <api_key> Header fehlt"}`
 - Unbekannte UUID → `404` `{"error": "Verbindung nicht gefunden"}`
-- Falscher Key → `401` `{"error": "Ungültiger API-Key"}`
+- Falscher Key → `401` `{"error": "Ungültiger API-Key"}` (auch, wenn das Konto deaktiviert wurde)
+- UUID nicht lesbar → `400` `{"error": "Ungültige UUID im Pfad"}`
+- Mehr als 20 Fehlversuche je Minute und IP → `429` mit `Retry-After` (bei `/stream` als `error`-Event)
 
 Empfehlung für den HomeAssistant Config-Flow: drei Felder abfragen – **Host/Base-URL**,
 **Verbindungs-UUID**, **API-Key** – und beim Setup direkt gegen den `/status`-Endpunkt validieren
@@ -98,8 +102,12 @@ Accept: text/event-stream
 Authorization: Bearer <api_key>
 ```
 
-Ohne `Accept: text/event-stream` schaltet der Server nicht in den SSE-Modus. `aiohttp` in Python
-setzt diesen Header nicht automatisch – explizit mitgeben.
+`aiohttp` in Python setzt diesen Header nicht automatisch – explizit mitgeben. Der AlarmServer öffnet den
+Stream zwar auch ohne ihn, bei der Vorgängerversion war er aber Pflicht.
+
+Je Verbindung sind bis zu **3 gleichzeitige Streams** möglich. Ein vierter verdrängt den ältesten; der
+verdrängte Stream endet ohne `error`-Event und verbindet sich wie bei jedem Abbruch neu. Wird der Key rotiert,
+die Verbindung gelöscht oder das Konto deaktiviert, endet der Stream sofort.
 
 **⚠️ Auth-Fehler kommen NICHT als HTTP-Statuscode.** Aus technischen Gründen (SSE-Antworten committen
 den HTTP-Status `200` bereits, bevor der Server die Zugangsdaten prüfen kann) wird ein ungültiger
@@ -112,9 +120,23 @@ das erste Event auswerten, bevor sie die Verbindung als erfolgreich etabliert be
 | Event       | Wann                                   | Daten (SSE `data:`-Feld)                                   |
 |-------------|------------------------------------------|--------------------------------------------------------------|
 | `connected` | Einmalig direkt nach erfolgreicher Auth   | `{"connectionName": "Zuhause"}`                              |
-| `alarm`     | Bei jedem neuen Alarm einer freigeschalteten Organisation | Gleiche Struktur wie ein Eintrag in `poll`'s `alarms[]` (siehe unten) |
+| `alarm`     | Bei jedem neuen Alarm einer freigeschalteten Organisation | Gleiche Struktur wie ein Eintrag in `poll`'s `alarms[]`, inkl. strukturiertem `alarmData` (siehe unten und [`homeassistant-alarm-data.md`](homeassistant-alarm-data.md)) |
 | `error`     | Bei Auth-Fehlern, danach wird die Verbindung geschlossen | `{"error": "Ungültiger API-Key"}` o.ä. |
+| `notification` | News bzw. Systembenachrichtigung, wenn die Verbindung sie abonniert hat. Nur an offene Verbindungen, nicht über `/poll` | `{"type":"NEWS","message":"...","timestamp":"..."}`; kann ignoriert werden |
 | *(Kommentar, kein Event)* | Alle 25s als Heartbeat, damit Proxys die Verbindung nicht wegen Inaktivität kappen | Zeile beginnt mit `:` (SSE-Kommentar) – vom `EventSource`-Standard ohnehin ignoriert, ggf. beim manuellen Parsen explizit überspringen |
+
+**`test`-Feld**: Jeder Alarm hat `test` (oberste Ebene und `alarmData`) mit `true` oder `false`. Test-Alarme,
+die in einer Organisation ausgelöst werden, sind echte Einträge mit eigener `id` und `test: true`; sie kommen
+über `/stream` und `/poll`. Der Probelauf aus dem Profil (unten) ist davon getrennt.
+
+**Testalarme**: Im GroupAlarm-Profil gibt es pro Verbindung einen "Testen"-Button, der einen frei
+erfundenen Alarm auslöst, um die Anbindung Ende-zu-Ende zu prüfen. Dieser kommt genauso als
+`alarm`-Event an, hat aber zusätzlich `"test": true` (sowohl auf oberster Ebene als auch in
+`alarmData`) sowie `"id": -1` und eine zufällige `organizationUuid`. Die Integration sollte diese
+Testalarme wie normale Alarme behandeln (Event feuern), kann anhand von `test`/`id: -1` aber optional
+z.B. in der UI kennzeichnen, dass es sich nicht um einen echten Einsatz handelt. Testalarme werden
+**nicht** in `alarm_log` geschrieben – sie kommen daher ausschließlich über `/stream` an, niemals über
+`/poll`, und nur, wenn gerade ein Stream verbunden ist.
 
 **Beispiel-Rohdaten des Streams**
 
@@ -125,8 +147,10 @@ event: connected
 data: {"connectionName":"Zuhause"}
 
 event: alarm
-data: {"id":143,"organizationUuid":"9b1c...-org1","organization":"Freiwillige Feuerwehr Musterstadt","message":"Alarm von: ...","timestamp":"2026-08-16T18:45:24.714Z","rawAlarm":{"...":"..."}}
+data: {"id":143,"organizationUuid":"9b1c...-org1","organization":"Freiwillige Feuerwehr Musterstadt","message":"Alarm von: ...","timestamp":"2026-08-16T18:45:24.714Z","alarmData":{"code":"B2.01","stichwort":"Gebäudebrand","adresse":"Musterstraße 1","ort":"Musterstadt","zusatz":"","fahrzeuge":"HLF 1, DLK 1","lat":52.520008,"lon":13.404954,"maps_link":"https://www.google.com/maps/search/?api=1&query=52.520008,13.404954","prioritaet":"Hoch","datum":"16.08.2026","uhrzeit":"20:45","test":false},"test":false}
 ```
+
+Vollständige Feldreferenz und ein ausführliches Beispiel: siehe [`homeassistant-alarm-data.md`](homeassistant-alarm-data.md).
 
 Reconnect-Verhalten: Bricht die Verbindung ab (Netzwerk, Server-Neustart), liefert der Stream **keine**
 rückwirkenden Events nach – nach einem Reconnect sofort `/poll?since_id=<letzte gesehene id>` aufrufen,
@@ -143,6 +167,9 @@ Verbindung zugeordnet sind.
 |------------|------|---------|---------|----------------------------------------------------------------------|
 | `since_id` | long | nein    | `0`     | Nur Alarme mit `id` größer als dieser Wert liefern.                   |
 | `limit`    | int  | nein    | `50`    | Maximale Anzahl Einträge pro Aufruf (Server begrenzt auf `1`–`200`).  |
+
+Geliefert werden nur Alarme, die tatsächlich zugestellt wurden: keine Duplikate, keine veralteten Alarme und
+keine Test-Alarme, die jemand anderes nur für sich ausgelöst hat.
 
 Beim allerersten Poll `since_id` weglassen oder `0` senden – das liefert die letzten `limit` Alarme
 (nicht die komplette Historie), damit die Integration nicht bei jedem Erst-Setup Tausende alte Alarme
@@ -168,7 +195,22 @@ Authorization: Bearer 9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c...
       "organization": "Freiwillige Feuerwehr Musterstadt",
       "message": "Alarm von: Freiwillige Feuerwehr Musterstadt\nDatum/Uhrzeit 16.08.2026 20:45\nB2.01 Gebäudebrand - Musterstraße 1, 12345 Musterstadt",
       "timestamp": "2026-08-16T18:45:24.714Z",
-      "rawAlarm": { "...": "quellenabhängig, siehe unten" }
+      "alarmData": {
+        "code": "B2.01",
+        "stichwort": "Gebäudebrand",
+        "adresse": "Musterstraße 1",
+        "ort": "Musterstadt",
+        "zusatz": "",
+        "fahrzeuge": "HLF 1, DLK 1",
+        "lat": 52.520008,
+        "lon": 13.404954,
+        "maps_link": "https://www.google.com/maps/search/?api=1&query=52.520008,13.404954",
+        "prioritaet": "Hoch",
+        "datum": "16.08.2026",
+        "uhrzeit": "20:45",
+        "test": false
+      },
+      "test": false
     },
     {
       "id": 144,
@@ -176,7 +218,7 @@ Authorization: Bearer 9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c...
       "organization": "DLRG Musterstadt",
       "message": "Alarm von: DLRG Musterstadt\n...",
       "timestamp": "2026-08-16T19:02:11.003Z",
-      "rawAlarm": { "...": "..." }
+      "alarmData": { "...": "..." }
     },
     {
       "id": 145,
@@ -184,7 +226,7 @@ Authorization: Bearer 9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c...
       "organization": "Freiwillige Feuerwehr Musterstadt",
       "message": "...",
       "timestamp": "2026-08-16T19:10:00.512Z",
-      "rawAlarm": { "...": "..." }
+      "alarmData": { "...": "..." }
     }
   ]
 }
@@ -196,11 +238,10 @@ Authorization: Bearer 9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c...
   aus `alarms[alarms.length-1].id` lesen, um Off-by-one-Fehler zu vermeiden.
 - `message` ist die bereits fertig formatierte Alarmtext (gemäß dem in GroupAlarm konfigurierten
   Alarmschema der jeweiligen Organisation).
-- `rawAlarm` enthält die Rohdaten der Alarmquelle (Struktur unterscheidet sich je nach `alarmSource`
-  der Organisation: `ALAMOS` liefert z.B. `unit`/`keyword`/`optionalContent.latitude`/`longitude`,
-  `GROUPALARM` liefert u.a. `resources`/`alarmResources`/`startDate`). Nicht blind auf ein festes Schema
-  verlassen – nur die Felder lesen, die für die eigene Automation relevant sind, und den Rest
-  ignorieren.
+- `alarmData` enthält dieselben strukturierten Zusatzfelder unabhängig von der Alarmquelle
+  (`alarmSource` der Organisation, `ALAMOS` oder `GROUPALARM`) – kein Rohformat mehr, das je nach
+  Quelle unterschiedlich aussieht. Vollständige Feldreferenz und Beispiel:
+  [`homeassistant-alarm-data.md`](homeassistant-alarm-data.md).
 
 **Fehlerfälle**: gleiche Auth-Fehler wie bei `/status` (`401`/`404`); zusätzlich `400` bei
 nicht-numerischem `since_id`.
@@ -216,7 +257,7 @@ bedeuten, die für "Licht an bei Einsatz" spürbar wäre.
    `latestId` aus der Antwort speichern.
 2. **Danach `/stream` öffnen** und dauerhaft offen halten. Jedes `alarm`-Event feuert sofort ein
    HomeAssistant-Event (z.B. `hass.bus.async_fire("groupalarm_alarm", {...})`) mit `organization`,
-   `organizationUuid`, `message`, `rawAlarm`, `timestamp`, `id`. Die `id` zusätzlich als "zuletzt
+   `organizationUuid`, `message`, `alarmData`, `timestamp`, `id`. Die `id` zusätzlich als "zuletzt
    gesehen" persistieren (`hass.data[DOMAIN][entry.entry_id]["latest_id"]`), damit der nächste
    Aufhol-Poll (Schritt 1) korrekt anschließt.
 3. **Bricht der Stream ab**, mit exponentiellem Backoff (z.B. 1s, 2s, 4s, ... max. 30s) neu verbinden.
