@@ -63,8 +63,11 @@ Org-Refresh per Timer, Verhalten unter HA 2024.12.
 
 ## Abnahme mit Thomas
 
-Noch **keiner** der Abnahmepunkte ist gelaufen; an Thomas' HomeAssistant und am
-AlarmServer wurde nichts geändert.
+Thomas testet seit 2026-11-08 mit `v0.4.0-beta.1` (HACS-Pre-Release, Branch-Auswahl liess HACS
+nicht zu). Bisher bestätigt: Umkonfigurieren klappt (mit Server-URL ohne `/api/...`, siehe
+Offene Punkte), ein Probelauf kam an. Organisationen, die erst nach dem Umkonfigurieren
+abonniert wurden, erschienen nach „Neu laden“ (sonst nach spätestens 15 Minuten). Von Claude
+wurde an Thomas' HomeAssistant und am AlarmServer nichts geändert.
 
 - [ ] Umkonfigurieren des bestehenden Eintrags klappt, die Gesamt-Entities behalten ihre IDs
 - [ ] Nach dem Umkonfigurieren feuert kein Event für alte Alarme, die Sensoren zeigen den letzten
