@@ -73,6 +73,13 @@ Automatisierte Tests gibt es jetzt (siehe "Tests"), CI noch nicht.
   `finally` explizit (`resp.close()`), `async_stop()` wartet auf das Ende
   des Tasks. Reload/Reconfigure entladen vollständig, bevor neu verbunden
   wird. Test: `test_reload_keeps_a_single_stream`.
+- **Server-URL wird gekürzt** (`api.normalize_base_url`): Das AlarmServer-Profil zeigt als
+  „Basis-URL“ `https://host/api/homeassistant/<uuid>` (`ContactController.access()`), nicht den
+  Server-Teil, wie es `homeassistant-integration-api.md` beschreibt. Eingefügt ergab das
+  `…/<uuid>/api/homeassistant/<uuid>/status`, und Spring Security antwortet darauf mit 401, was
+  wie ein falscher Key aussah (Fund bei Thomas' Abnahme, 2026-11-08). Alles ab `/api` wird
+  abgeschnitten, fehlendes Schema wird `https`. Auch im Client angewandt, damit bestehende
+  Einträge mit langer URL funktionieren.
 - **Optionen** werden live aus `entry.options` gelesen; kein Update-Listener,
   kein Reload, kein neuer Stream.
 - **Erweiterbarkeit (Monitore, M10b).** Neue Plattformen: `PLATFORMS` in

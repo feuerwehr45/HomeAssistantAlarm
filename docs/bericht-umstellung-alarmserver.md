@@ -77,6 +77,12 @@ AlarmServer wurde nichts geändert.
 
 ## Offene Punkte
 
+- **Gefunden bei der Abnahme (beta.1):** Die im Profil angezeigte „Basis-URL“ enthält
+  `/api/homeassistant/<uuid>`. Als Server-URL eingetragen, führte das zu „Ungültiger API-Key“
+  (401 von Spring Security für den doppelten Pfad). Die Integration kürzt die URL jetzt selbst
+  (`normalize_base_url`, auf `alarmserver` gepusht, noch nicht als Beta veröffentlicht). Für den
+  AlarmServer: Anzeige im Profil oder `docs/homeassistant-integration-api.md` angleichen.
+
 - Abnahme (oben), danach Merge nach `main`, Tag `v0.4.0`, GitHub-Release – nur nach
   Thomas' OK. `gh` ist auf dem Rechner nicht installiert; für `gh release create`
   installieren oder das Release in der GitHub-Oberfläche anlegen.

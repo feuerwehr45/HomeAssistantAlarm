@@ -69,6 +69,29 @@ def _parse_retry_after(value: str | None) -> float | None:
     return seconds if seconds >= 0 else None
 
 
+def normalize_base_url(url: str) -> str:
+    """Reduce what the user entered to the server root.
+
+    The AlarmServer profile shows the "Basis-URL" as the full endpoint base
+    `https://host/api/homeassistant/<uuid>`. Pasting that as server URL would
+    produce `.../api/homeassistant/<uuid>/api/homeassistant/<uuid>/status`,
+    which Spring Security answers with 401 - looking like a wrong API key.
+    Everything from `/api` on is therefore cut off; a missing scheme becomes
+    https.
+    """
+    url = url.strip()
+    if url and "://" not in url:
+        url = f"https://{url}"
+    url = url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    scheme, sep, rest = url.partition("://")
+    host, slash, path = rest.partition("/")
+    segments = path.split("/") if slash else []
+    if "api" in segments:
+        segments = segments[: segments.index("api")]
+    path = "/".join(s for s in segments if s)
+    return f"{scheme}{sep}{host}" + (f"/{path}" if path else "")
+
+
 def classify_stream_error(message: str) -> GroupAlarmError:
     """Map the text of an SSE `error` event to an exception."""
     lowered = message.lower()
@@ -92,7 +115,7 @@ class GroupAlarmClient:
         api_key: str,
     ) -> None:
         self._session = session
-        self._base_url = base_url.rstrip("/")
+        self._base_url = normalize_base_url(base_url)
         self._uuid = uuid
         self._headers = {"Authorization": f"Bearer {api_key}"}
 

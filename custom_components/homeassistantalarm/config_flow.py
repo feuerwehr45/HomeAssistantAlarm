@@ -18,6 +18,7 @@ from .api import (
     GroupAlarmError,
     GroupAlarmNotFoundError,
     GroupAlarmRateLimitError,
+    normalize_base_url,
 )
 from .const import (
     CONF_MAX_AGE_MINUTES,
@@ -48,7 +49,7 @@ def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
 
 def _clean(user_input: dict[str, Any]) -> tuple[str, str, str]:
     return (
-        user_input[CONF_HOST].strip().rstrip("/"),
+        normalize_base_url(user_input[CONF_HOST]),
         user_input[CONF_UUID].strip(),
         user_input[CONF_API_KEY].strip(),
     )

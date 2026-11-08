@@ -63,6 +63,27 @@ async def test_user_flow_defaults_and_creates_entry(
     await wait_for(lambda: server.open_streams == 1)
 
 
+async def test_user_flow_accepts_full_profile_url(
+    hass: HomeAssistant, server: FakeAlarmServer
+) -> None:
+    """The profile shows `<root>/api/homeassistant/<uuid>` as Basis-URL."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_HOST: f"{server.base_url}/api/homeassistant/{UUID_A}",
+            CONF_UUID: UUID_A,
+            CONF_API_KEY: KEY_A,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == server.base_url
+    await hass.async_block_till_done()
+    await wait_for(lambda: server.open_streams == 1)
+
+
 async def test_user_flow_rate_limited(
     hass: HomeAssistant, server: FakeAlarmServer
 ) -> None:

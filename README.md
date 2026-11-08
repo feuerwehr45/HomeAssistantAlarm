@@ -57,6 +57,9 @@ kopieren und Home Assistant neu starten.
 4. **Server-URL** (vorbelegt mit `https://alarm.feuerwehr45.de`),
    **Verbindungs-UUID** und **API-Key** eingeben. Ein selbst gehosteter
    AlarmServer hat die Form `http://<server>:<port>` (Standardport `8080`).
+   Die im Profil angezeigte volle Adresse
+   (`https://alarm.feuerwehr45.de/api/homeassistant/<UUID>`) geht auch, die
+   Integration kürzt sie ab Version 0.4.0-beta.2 selbst auf den Server-Teil.
 
 Neu abonnierte Organisationen erkennt die Integration automatisch (Prüfung
 alle 15 Minuten, sofort bei einem Alarm einer unbekannten Organisation) und
